@@ -1,6 +1,9 @@
 import './App.css';
-
+import { useState } from 'react';
+import ChessGame from './ChessGame';
 function App() {
+  const [count, setCount] = useState(0);
+
   return (
     <div className="App">
       <header className="App-header">
@@ -21,6 +24,13 @@ function App() {
             Learn React
           </a>
         </p>
+        {/* Counter UI */}
+        <div style={{ marginTop: '2rem' }}>
+          <h2>Counter: {count}</h2>
+          <button onClick={() => setCount(count - 1)}>-</button>
+          <button onClick={() => setCount(count + 1)} style={{ marginLeft: '1rem' }}>+</button>
+        </div>
+            <ChessGame />
       </header>
     </div>
   );
