@@ -324,7 +324,21 @@ function ChessGame() {
   const [dragged, setDragged] = useState(null);
   const [premove, setPremove] = useState(null);
   const [castlingRights, setCastlingRights] = useState(initialCastlingRights());
+  const [history, setHistory] = useState([{ board: initialBoard(), whiteTurn: true, castlingRights: initialCastlingRights() }]);
+  const [historyIndex, setHistoryIndex] = useState(0);
   const boardRef = useRef();
+
+  // Update board and state when historyIndex changes
+  React.useEffect(() => {
+    const entry = history[historyIndex];
+    setBoard(entry.board.map(row => row.slice()));
+    setWhiteTurn(entry.whiteTurn);
+    setCastlingRights({ ...entry.castlingRights });
+    setSelected(null);
+    setPremove(null);
+    setStatus('');
+  // eslint-disable-next-line
+  }, [historyIndex]);
 
   // Check for checkmate or stalemate
   React.useEffect(() => {
@@ -475,6 +489,16 @@ function ChessGame() {
     if (to[0] === 0 && to[1] === 0 && board[0][0] === 'r') newCastlingRights.blackQueenside = false;
     if (to[0] === 0 && to[1] === 7 && board[0][7] === 'r') newCastlingRights.blackKingside = false;
 
+    // Save new history (truncate if not at end)
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push({
+      board: newBoard.map(row => row.slice()),
+      whiteTurn: !whiteTurn,
+      castlingRights: { ...newCastlingRights }
+    });
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+
     setBoard(newBoard);
     setSelected(null);
     setWhiteTurn(w => !w);
@@ -518,106 +542,196 @@ function ChessGame() {
     ? board.slice().reverse().map(row => row.slice().reverse())
     : board;
 
+  // Notation arrays
+  const files = flipped
+    ? ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a']
+    : ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+  const ranks = flipped
+    ? [1, 2, 3, 4, 5, 6, 7, 8]
+    : [8, 7, 6, 5, 4, 3, 2, 1];
+
   return (
     <div>
       <h2>Chess Game</h2>
-      <button onClick={() => setFlipped(f => !f)} style={{ marginBottom: '1rem', marginRight: '1rem' }}>
-        Flip Board
-      </button>
-      <button onClick={() => {
-        setBoard(initialBoard());
-        setWhiteTurn(true);
-        setSelected(null);
-        setStatus('');
-        setPremove(null);
-        setCastlingRights(initialCastlingRights());
-      }} style={{ marginBottom: '1rem' }}>
-        Reset Game
-      </button>
-      <div
-        ref={boardRef}
-        style={{
-          display: 'grid',
-          gridTemplateRows: 'repeat(8, 64px)',
-          gridTemplateColumns: 'repeat(8, 64px)',
-          border: '2px solid #333',
-          width: '512px'
-        }}
-      >
-        {displayBoard.map((rowArr, rowIdx) =>
-          rowArr.map((cell, colIdx) => {
-            const realRow = flipped ? 7 - rowIdx : rowIdx;
-            const realCol = flipped ? 7 - colIdx : colIdx;
-            const isSelected = selected && selected[0] === realRow && selected[1] === realCol;
-            const isWhiteSquare = (realRow + realCol) % 2 === 1;
-            const isWhitePiece = cell && cell === cell.toUpperCase();
-            let highlight = false;
-            if (selected && board[selected[0]][selected[1]]) {
-              const legalMoves = getLegalMoves(board, selected[0], selected[1], whiteTurn, castlingRights)
-                .filter(([mr, mc]) => {
-                  const newBoard = makeMove(board, [selected[0], selected[1]], [mr, mc]);
-                  return !isKingInCheck(newBoard, whiteTurn);
-                });
-              highlight = legalMoves.some(([mr, mc]) => mr === realRow && mc === realCol);
-            }
-            // Highlight premove destination
-            const isPremoveDest =
-              premove &&
-              premove.to[0] === realRow &&
-              premove.to[1] === realCol;
-            return (
-              <div
-                key={rowIdx + '-' + colIdx}
-                onClick={() => handleCellClick(realRow, realCol)}
-                draggable={
-                  cell &&
-                  ((whiteTurn && isWhitePiece) || (!whiteTurn && !isWhitePiece))
+      <div style={{ marginBottom: '1rem' }}>
+        <button
+          onClick={() => setHistoryIndex(i => Math.max(0, i - 1))}
+          disabled={historyIndex === 0}
+          style={{ marginRight: 8 }}
+        >
+          ⬅ Back
+        </button>
+        <button
+          onClick={() => setHistoryIndex(i => Math.min(history.length - 1, i + 1))}
+          disabled={historyIndex === history.length - 1}
+          style={{ marginRight: 16 }}
+        >
+          Forward ➡
+        </button>
+        <button onClick={() => setFlipped(f => !f)} style={{ marginRight: '1rem' }}>
+          Flip Board
+        </button>
+        <button onClick={() => {
+          setBoard(initialBoard());
+          setWhiteTurn(true);
+          setSelected(null);
+          setStatus('');
+          setPremove(null);
+          setCastlingRights(initialCastlingRights());
+          setHistory([{ board: initialBoard(), whiteTurn: true, castlingRights: initialCastlingRights() }]);
+          setHistoryIndex(0);
+        }}>
+          Reset Game
+        </button>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start' }}>
+        {/* Ranks (left side) */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          marginRight: 8, // More space for clarity
+          height: 512
+        }}>
+          {ranks.map((rank, i) => (
+            <div
+              key={rank}
+              style={{
+                height: 64,
+                lineHeight: '64px',
+                textAlign: 'right',
+                fontWeight: 'bold',
+                color: '#222', // Darker for better contrast
+                fontSize: 22,  // Larger font
+                background: '#f8f8f8', // Light background for visibility
+                borderRadius: 6,
+                marginBottom: i !== ranks.length - 1 ? 0 : 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                paddingRight: 8
+              }}
+            >
+              {rank}
+            </div>
+          ))}
+        </div>
+        {/* Board and files (bottom) */}
+        <div>
+          <div
+            ref={boardRef}
+            style={{
+              display: 'grid',
+              gridTemplateRows: 'repeat(8, 64px)',
+              gridTemplateColumns: 'repeat(8, 64px)',
+              border: '2px solid #333',
+              width: '512px',
+              background: '#333'
+            }}
+          >
+            {displayBoard.map((rowArr, rowIdx) =>
+              rowArr.map((cell, colIdx) => {
+                const realRow = flipped ? 7 - rowIdx : rowIdx;
+                const realCol = flipped ? 7 - colIdx : colIdx;
+                const isSelected = selected && selected[0] === realRow && selected[1] === realCol;
+                const isWhiteSquare = (realRow + realCol) % 2 === 1;
+                const isWhitePiece = cell && cell === cell.toUpperCase();
+                let highlight = false;
+                if (selected && board[selected[0]][selected[1]]) {
+                  const legalMoves = getLegalMoves(board, selected[0], selected[1], whiteTurn, castlingRights)
+                    .filter(([mr, mc]) => {
+                      const newBoard = makeMove(board, [selected[0], selected[1]], [mr, mc]);
+                      return !isKingInCheck(newBoard, whiteTurn);
+                    });
+                  highlight = legalMoves.some(([mr, mc]) => mr === realRow && mc === realCol);
                 }
-                onDragStart={e => handleDragStart(realRow, realCol, e)}
-                onDragOver={handleDragOver}
-                onDrop={e => handleDropEvent(realRow, realCol, e)}
+                // Highlight premove destination
+                const isPremoveDest =
+                  premove &&
+                  premove.to[0] === realRow &&
+                  premove.to[1] === realCol;
+                return (
+                  <div
+                    key={rowIdx + '-' + colIdx}
+                    onClick={() => handleCellClick(realRow, realCol)}
+                    draggable={
+                      cell &&
+                      ((whiteTurn && isWhitePiece) || (!whiteTurn && !isWhitePiece))
+                    }
+                    onDragStart={e => handleDragStart(realRow, realCol, e)}
+                    onDragOver={handleDragOver}
+                    onDrop={e => handleDropEvent(realRow, realCol, e)}
+                    style={{
+                      width: 64,
+                      height: 64,
+                      background: isPremoveDest
+                        ? '#00bfff'
+                        : isSelected
+                        ? '#ff0'
+                        : highlight
+                        ? '#90ee90'
+                        : isWhiteSquare
+                        ? '#fff'
+                        : '#228B22',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 44,
+                      fontWeight: 'bold',
+                      cursor:
+                        status.startsWith('Checkmate') || status === 'Stalemate!'
+                          ? 'not-allowed'
+                          : cell
+                          ? 'grab'
+                          : 'pointer',
+                      border: '1px solid #444',
+                      color: cell
+                        ? isWhitePiece
+                          ? '#fff'
+                          : '#111'
+                        : undefined,
+                      textShadow:
+                        cell && isWhitePiece
+                          ? '0 0 2px #000, 0 0 4px #000'
+                          : undefined,
+                      userSelect: 'none',
+                      boxSizing: 'border-box',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    {cell ? pieceUnicode[cell] : ''}
+                  </div>
+                );
+              })
+            )}
+          </div>
+          {/* Files (bottom) */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'row',
+            width: 512,
+            marginTop: 2,
+            background: '#f8f8f8', // Light background for visibility
+            borderRadius: 6
+          }}>
+            {files.map(file => (
+              <div
+                key={file}
                 style={{
                   width: 64,
-                  height: 64,
-                  background: isPremoveDest
-                    ? '#00bfff'
-                    : isSelected
-                    ? '#ff0'
-                    : highlight
-                    ? '#90ee90'
-                    : isWhiteSquare
-                    ? '#fff'
-                    : '#228B22',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 44,
+                  textAlign: 'center',
                   fontWeight: 'bold',
-                  cursor:
-                    status.startsWith('Checkmate') || status === 'Stalemate!'
-                      ? 'not-allowed'
-                      : cell
-                      ? 'grab'
-                      : 'pointer',
-                  border: '1px solid #444',
-                  color: cell
-                    ? isWhitePiece
-                      ? '#fff'
-                      : '#111'
-                    : undefined,
-                  textShadow:
-                    cell && isWhitePiece
-                      ? '0 0 2px #000, 0 0 4px #000'
-                      : undefined,
-                  userSelect: 'none',
-                  boxSizing: 'border-box'
+                  color: '#222', // Darker for better contrast
+                  fontSize: 22,  // Larger font
+                  height: 28,
+                  lineHeight: '28px'
                 }}
               >
-                {cell ? pieceUnicode[cell] : ''}
+                {file}
               </div>
-            );
-          })
-        )}
+            ))}
+          </div>
+        </div>
       </div>
       <p style={{ marginTop: '1rem' }}>
         Turn:{' '}
